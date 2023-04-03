@@ -16,3 +16,7 @@ Or as admin:
 )
 ```
 
+## Commands to run stuff:
+Run project: `zig build && zig-out\bin\zig.exe`
+
+Run tests: `zig test src\main.zig`

@@ -2,7 +2,8 @@ const std = @import("std");
 
 const Allocator = std.mem.Allocator;
 
-const OpCode = enum { OP_RETURN };
+pub const OpCode = enum(u8) { OP_RETURN };
+pub const num_op_codes = std.enums.values(OpCode).len;
 
 // TODO: Does Zig have a built-in list type that offers this structure, but better?
 pub const Chunk = struct {
