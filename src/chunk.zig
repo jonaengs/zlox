@@ -16,11 +16,12 @@ pub const Chunk = struct {
     count: usize, // Num actual elements in chunk
     capacity: usize, // Num elements there's space allocated for in the chunk
     code: ?[]u8,
+    lines: ?[]u32, // lines is step-locked with code.
     constants: ValueArray,
 };
 
 pub inline fn create_chunk() Chunk {
-    var chunk = Chunk{ .count = undefined, .capacity = undefined, .code = undefined, .constants = undefined };
+    var chunk = Chunk{ .count = undefined, .capacity = undefined, .code = undefined, .constants = undefined, .lines = undefined };
     init_chunk(&chunk);
     return chunk;
 }
@@ -33,23 +34,24 @@ pub fn free_chunk(allocator: Allocator, chunk: *Chunk) void {
     if (chunk.code) |data| {
         allocator.free(data);
     }
+    if (chunk.lines) |data| {
+        allocator.free(data);
+    }
     init_chunk(chunk);
 }
 
-pub fn write_chunk(allocator: Allocator, chunk: *Chunk, byte: u8) void {
+pub fn write_chunk(allocator: Allocator, chunk: *Chunk, byte: u8, line: u32) void {
     // TODO: Handle allocation failure
     if (chunk.capacity <= chunk.count) {
         // const old_capacity = chunk.capacity;
         chunk.capacity = mem.grow_capacity(chunk.capacity);
         chunk.code = mem.grow_array(u8, allocator, chunk.code, chunk.capacity) catch unreachable;
+        chunk.lines = mem.grow_array(u32, allocator, chunk.lines, chunk.capacity) catch unreachable;
     }
 
-    if (chunk.code) |data| {
-        data[chunk.count] = byte;
-        chunk.count += 1;
-    } else {
-        unreachable;
-    }
+    chunk.code.?[chunk.count] = byte;
+    chunk.lines.?[chunk.count] = line;
+    chunk.count += 1;
 }
 
 pub fn add_constant(allocator: Allocator, chunk: *Chunk, value: values.Value) u8 {
@@ -68,5 +70,6 @@ fn init_chunk(chunk: *Chunk) void {
     chunk.count = 0;
     chunk.capacity = 0;
     chunk.code = null;
+    chunk.lines = null;
     chunk.constants = values.create_value_array();
 }

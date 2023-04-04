@@ -15,9 +15,11 @@ pub fn main() !void {
     }
 
     // Write some stuff to the chunk
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN));
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN));
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN));
+    const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.0 });
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 111);
+    chunks.write_chunk(gpa, &chunk, constant, 111);
+
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN), 123);
 
     // Test the debug functionality
     debug.disassemble_chunk(&chunk, "Test Chunk");
@@ -35,9 +37,9 @@ test "chunk allocation" {
     }
 
     // Insert 100 items into the chunk
-    var i: i32 = 0;
+    var i: u32 = 0;
     while (i < 100) : (i += 1) {
-        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN));
+        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN), i);
     }
 
     // Check that code behaves as expected
@@ -60,12 +62,12 @@ test "chunk add constant" {
     }
 
     const value_array_idx_1 = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.0 });
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT));
-    chunks.write_chunk(gpa, &chunk, value_array_idx_1);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 1);
+    chunks.write_chunk(gpa, &chunk, value_array_idx_1, 1);
 
     const value_array_idx_2 = chunks.add_constant(gpa, &chunk, values.Value{ .double = 2.0 });
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT));
-    chunks.write_chunk(gpa, &chunk, value_array_idx_2);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 1);
+    chunks.write_chunk(gpa, &chunk, value_array_idx_2, 1);
 
     debug.disassemble_chunk(&chunk, "Constant");
 }
@@ -101,7 +103,7 @@ test "value array allocation" {
     }
 
     // Insert 100 items into the chunk
-    var i: i32 = 0;
+    var i: u32 = 0;
     while (i < 100) : (i += 1) {
         values.write_value_array(gpa, &val_arr, values.Value{ .double = 1.0 });
     }
