@@ -20,6 +20,13 @@ fn simple_instruction(name: []const u8, offset: usize) usize {
     return offset + 1;
 }
 
+fn constant_instruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    const constant = chunk.code.?[offset + 1];
+    std.debug.print("{s} {d:0>4} ", .{ name, offset });
+    std.debug.print("'{}'\n", .{constant});
+    return offset + 2;
+}
+
 // Returns the passed offset plus the size of the instruction at the current offset
 fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
     std.debug.print("{d:0>4} ", .{offset});
@@ -36,6 +43,9 @@ fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
     switch (op_code) {
         OpCode.OP_RETURN => {
             return simple_instruction(@tagName(op_code), offset);
+        },
+        OpCode.OP_CONSTANT => {
+            return constant_instruction(@tagName(op_code), chunk, offset);
         },
     }
 }
