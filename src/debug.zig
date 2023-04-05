@@ -28,7 +28,7 @@ fn constant_instruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
 }
 
 // Returns the passed offset plus the size of the instruction at the current offset
-fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
+pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
     std.debug.print("{d:0>4} ", .{offset});
     if (offset > 0 and chunk.lines.?[offset] == chunk.lines.?[offset - 1]) {
         std.debug.print("   | ", .{});

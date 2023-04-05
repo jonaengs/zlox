@@ -2,11 +2,15 @@ const std = @import("std");
 const chunks = @import("chunk.zig");
 const values = @import("value.zig");
 const debug = @import("debug.zig");
+const vm = @import("vm.zig");
 
 pub fn main() !void {
     // Setup allocator
     var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = general_purpose_allocator.allocator();
+
+    vm.init_vm();
+    defer vm.free_vm();
 
     // Setup a chunk
     var chunk = chunks.create_chunk();
@@ -15,14 +19,17 @@ pub fn main() !void {
     }
 
     // Write some stuff to the chunk
-    const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.0 });
+    const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.2 });
     chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 111);
     chunks.write_chunk(gpa, &chunk, constant, 111);
 
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN), 123);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN), 112);
 
     // Test the debug functionality
     debug.disassemble_chunk(&chunk, "Test Chunk");
+
+    // Run the chunk in the VM
+    _ = vm.interpret(&chunk);
 }
 
 test "chunk allocation" {

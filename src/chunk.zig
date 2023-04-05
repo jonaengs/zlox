@@ -4,12 +4,19 @@ const values = @import("value.zig");
 
 const ValueArray = values.ValueArray;
 
+// TODO: Use arena allocator for chunks?
+// Arena: A dynamic series of fixed-size bump allocators.
+// Should make growing all our arrays very quick.
+// Problem: Realloc should always be in-place, but can we guarantee this?
+// What about a slab allocator?
 const Allocator = std.mem.Allocator;
 
 pub const OpCode = enum(u8) { OP_RETURN, OP_CONSTANT };
 pub const num_op_codes = std.enums.values(OpCode).len;
 
 // TODO: Create a better API. Combine create_chunk and init_chunk.
+// TODO: Can we make it so that Chunks without allocated code and lines is impossible to create?
+// Then, we could remove the optional from these fields, and simplify the code.
 
 // TODO: Does Zig have a built-in list type that offers this structure, but better?
 pub const Chunk = struct {
