@@ -40,6 +40,14 @@ pub fn free_value_array(allocator: Allocator, value_array: *ValueArray) void {
     init_value_array(value_array);
 }
 
+pub fn print_value(value: Value) void {
+    switch (value) {
+        ValuesTag.double => |d| {
+            std.debug.print("{d}", .{d});
+        },
+    }
+}
+
 //// PRIVATE FUNCTIONS BELOW ////
 
 fn init_value_array(value_array: *ValueArray) void {
