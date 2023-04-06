@@ -11,7 +11,15 @@ const ValueArray = values.ValueArray;
 // What about a slab allocator?
 const Allocator = std.mem.Allocator;
 
-pub const OpCode = enum(u8) { OP_RETURN, OP_CONSTANT };
+pub const OpCode = enum(u8) {
+    RETURN,
+    CONSTANT,
+    NEGATE,
+    ADD,
+    SUBTRACT,
+    MULTIPLY,
+    DIVIDE,
+};
 pub const num_op_codes = std.enums.values(OpCode).len;
 
 // TODO: Create a better API. Combine create_chunk and init_chunk.

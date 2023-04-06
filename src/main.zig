@@ -18,18 +18,85 @@ pub fn main() !void {
         chunks.free_chunk(gpa, &chunk);
     }
 
-    // Write some stuff to the chunk
+    // Write const value
     const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.2 });
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 111);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 111);
     chunks.write_chunk(gpa, &chunk, constant, 111);
 
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN), 112);
+    // Negate the value
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.NEGATE), 111);
 
-    // Test the debug functionality
+    // Return the negated value
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), 112);
+
     debug.disassemble_chunk(&chunk, "Test Chunk");
 
     // Run the chunk in the VM
     _ = vm.interpret(&chunk);
+}
+
+test "evalaute binary operations" {
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = general_purpose_allocator.allocator();
+    vm.init_vm();
+    defer vm.free_vm();
+    var chunk = chunks.create_chunk();
+    defer chunks.free_chunk(gpa, &chunk);
+
+    { // Add 2.2 to stack
+        const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 2.2 });
+        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 123);
+        chunks.write_chunk(gpa, &chunk, constant, 123);
+    }
+    { // Add 3.4 to stack
+        const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 3.4 });
+        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 123);
+        chunks.write_chunk(gpa, &chunk, constant, 123);
+    }
+
+    // Add the two numbers
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.ADD), 123);
+
+    { // Add 5.6 to the stack
+        const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 5.6 });
+        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 123);
+        chunks.write_chunk(gpa, &chunk, constant, 123);
+    }
+    // Divide the two numbers
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.DIVIDE), 123);
+    // Negate the result
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.NEGATE), 123);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), 123);
+
+    try std.testing.expectEqual(vm.InterpretResult.OK, vm.interpret(&chunk));
+    // VM is technically empty after we return (and thus pop) the only stack value, but
+    // the value still resides on the stack, and we can still view it.
+    try std.testing.expectApproxEqAbs(@as(f64, -1), vm.peek_ahead().double, 0.00001);
+}
+
+test "simple vm" {
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = general_purpose_allocator.allocator();
+
+    vm.init_vm();
+    defer vm.free_vm();
+    var chunk = chunks.create_chunk();
+    defer chunks.free_chunk(gpa, &chunk);
+
+    // Write const value
+    const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.2 });
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 111);
+    chunks.write_chunk(gpa, &chunk, constant, 111);
+
+    // Negate the value
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.NEGATE), 111);
+
+    // Return the negated value
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), 112);
+
+    // Run the chunk in the VM
+    const result = vm.interpret(&chunk);
+    try std.testing.expectEqual(vm.InterpretResult.OK, result);
 }
 
 test "chunk allocation" {
@@ -45,14 +112,14 @@ test "chunk allocation" {
 
     // Insert 100 items into the chunk
     var i: u32 = 0;
-    while (i < 100) : (i += 1) {
-        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_RETURN), i);
+    while (i < 30) : (i += 1) {
+        chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), i / 5);
     }
 
     // Check that code behaves as expected
-    try std.testing.expectEqual(@as(usize, 100), chunk.count);
-    try std.testing.expectEqual(@as(usize, 128), chunk.capacity);
-    try std.testing.expectEqual(@as(usize, 128), chunk.code.?.len);
+    try std.testing.expectEqual(@as(usize, 30), chunk.count);
+    try std.testing.expectEqual(@as(usize, 32), chunk.capacity);
+    try std.testing.expectEqual(@as(usize, 32), chunk.code.?.len);
 
     debug.disassemble_chunk(&chunk, "Test");
 }
@@ -69,11 +136,11 @@ test "chunk add constant" {
     }
 
     const value_array_idx_1 = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.0 });
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 1);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 1);
     chunks.write_chunk(gpa, &chunk, value_array_idx_1, 1);
 
     const value_array_idx_2 = chunks.add_constant(gpa, &chunk, values.Value{ .double = 2.0 });
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.OP_CONSTANT), 1);
+    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 1);
     chunks.write_chunk(gpa, &chunk, value_array_idx_2, 1);
 
     debug.disassemble_chunk(&chunk, "Constant");

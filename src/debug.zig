@@ -6,7 +6,7 @@ const num_op_codes = @import("chunk.zig").num_op_codes;
 // @tagName to get name of enum
 // @enumToInt to get int value of enum
 // @intToEnum to get enum from int
-pub fn disassemble_chunk(chunk: *Chunk, name: []const u8) void {
+pub fn disassemble_chunk(chunk: *const Chunk, name: []const u8) void {
     std.debug.print("== {s} ==\n", .{name});
 
     var offset: usize = 0;
@@ -20,7 +20,7 @@ fn simple_instruction(name: []const u8, offset: usize) usize {
     return offset + 1;
 }
 
-fn constant_instruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+fn constant_instruction(name: []const u8, chunk: *const Chunk, offset: usize) usize {
     const constant_idx = chunk.code.?[offset + 1];
     std.debug.print("{s:<12} {d:0>4} ", .{ name, offset });
     std.debug.print("'{}'\n", .{constant_idx});
@@ -28,7 +28,7 @@ fn constant_instruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
 }
 
 // Returns the passed offset plus the size of the instruction at the current offset
-pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
+pub fn disassemble_instruction(chunk: *const Chunk, offset: usize) usize {
     std.debug.print("{d:0>4} ", .{offset});
     if (offset > 0 and chunk.lines.?[offset] == chunk.lines.?[offset - 1]) {
         std.debug.print("   | ", .{});
@@ -46,11 +46,14 @@ pub fn disassemble_instruction(chunk: *Chunk, offset: usize) usize {
     // TO match multiple, separate with comma: case1, case2, case3 =>
     const op_code = @intToEnum(OpCode, instruction);
     switch (op_code) {
-        OpCode.OP_RETURN => {
+        OpCode.RETURN, OpCode.NEGATE, OpCode.ADD, OpCode.SUBTRACT, OpCode.MULTIPLY, OpCode.DIVIDE => {
             return simple_instruction(@tagName(op_code), offset);
         },
-        OpCode.OP_CONSTANT => {
+        OpCode.CONSTANT => {
             return constant_instruction(@tagName(op_code), chunk, offset);
         },
+        // else => {
+        //     return offset + 1;
+        // },
     }
 }
