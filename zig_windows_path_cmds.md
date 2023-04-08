@@ -18,6 +18,7 @@ Or as admin:
 
 ## Commands to run stuff:
 Run the project: `zig build run`
+With args: `zig build run -- arg1`
 
 Run all tests: `zig build test`
 

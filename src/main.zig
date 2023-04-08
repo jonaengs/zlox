@@ -4,35 +4,96 @@ const values = @import("value.zig");
 const debug = @import("debug.zig");
 const vm = @import("vm.zig");
 
+fn repl() !void {
+    const stdin = std.io.getStdIn().reader();
+    var buffer: [1024]u8 = undefined;
+    while (true) {
+        std.debug.print("> ", .{});
+
+        // If only input is EOF, end REPL
+        const bytes_read = try stdin.readAll(&buffer);
+        if (bytes_read == 0) {
+            std.debug.print("\n", .{});
+            break;
+        }
+        intepret(buffer[0..]);
+    }
+}
+
+fn read_file(allocator: Allocator, path: []const u8) ![]const u8 {
+    const cwd = std.fs.cwd();
+    std.debug.print("{s}\n", .{path});
+    std.debug.print("{}\n", .{cwd});
+    const file = try cwd.openFile(path, .{});
+
+    const fsize = try file.getEndPos();
+    std.debug.print("{}\n", .{fsize});
+
+    var buffer = try allocator.alloc(u8, fsize);
+    errdefer {
+        allocator.free(buffer);
+    }
+
+    // TODO: Why isn't ReadError automatically returned if readall fails?
+    // It must be returned manually for some reason.
+    const bytes_read = try file.readAll(buffer);
+    if (bytes_read < fsize) {
+        std.debug.print("{}, {}\n", .{ fsize, bytes_read });
+        return error.ReadError;
+    }
+
+    std.debug.print("\n==== FILE BEGIN ====\n", .{});
+    std.debug.print("{s}\n", .{buffer});
+    std.debug.print("==== FILE END ====\n", .{});
+
+    return buffer;
+}
+
+fn run_file(allocator: Allocator, path: []const u8) !void {
+    // TODO: Move error handling into read_file
+    if (read_file(allocator, path)) |source| {
+        const result = vm.interpret(source);
+        _ = result;
+
+        allocator.free(source);
+    } else |err| switch (err) {
+        error.FileNotFound => {
+            std.debug.print("\nERROR: Could not find file: {s}.\n", .{path});
+            std.os.exit(74);
+        },
+        error.OutOfMemory => {
+            std.debug.print("\nERROR: Not enough memory to read: {s}.\n", .{path});
+            std.os.exit(74);
+        },
+        error.ReadError => {
+            std.debug.print("\nERROR: Could not read file: {s}.\n", .{path});
+            std.os.exit(74);
+        },
+        else => {
+            return err;
+        },
+    }
+}
+
 pub fn main() !void {
     // Setup allocator
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = general_purpose_allocator.allocator();
 
     vm.init_vm();
     defer vm.free_vm();
 
-    // Setup a chunk
-    var chunk = chunks.create_chunk();
-    defer {
-        chunks.free_chunk(gpa, &chunk);
+    const args = try std.process.argsAlloc(gpa);
+    defer std.process.argsFree(gpa, args);
+    for (args) |arg, i| {
+        std.debug.print("{}: {s}\n", .{ i, arg });
     }
-
-    // Write const value
-    const constant = chunks.add_constant(gpa, &chunk, values.Value{ .double = 1.2 });
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.CONSTANT), 111);
-    chunks.write_chunk(gpa, &chunk, constant, 111);
-
-    // Negate the value
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.NEGATE), 111);
-
-    // Return the negated value
-    chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), 112);
-
-    debug.disassemble_chunk(&chunk, "Test Chunk");
-
-    // Run the chunk in the VM
-    _ = vm.interpret(&chunk);
+    if (args.len == 1) {
+        try repl();
+    } else if (args.len == 2) {
+        try run_file(gpa, args[1]);
+    } else {
+        std.debug.print("Usage: zlox [path]\n", .{});
+        std.process.exit(64);
+    }
 }
 
 test "evalaute binary operations" {
@@ -68,7 +129,7 @@ test "evalaute binary operations" {
     chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.NEGATE), 123);
     chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), 123);
 
-    try std.testing.expectEqual(vm.InterpretResult.OK, vm.interpret(&chunk));
+    try std.testing.expectEqual(vm.InterpretResult.OK, vm.interpret_chunk(&chunk));
     // VM is technically empty after we return (and thus pop) the only stack value, but
     // the value still resides on the stack, and we can still view it.
     try std.testing.expectApproxEqAbs(@as(f64, -1), vm.peek_ahead().double, 0.00001);
@@ -95,7 +156,7 @@ test "simple vm" {
     chunks.write_chunk(gpa, &chunk, @enumToInt(chunks.OpCode.RETURN), 112);
 
     // Run the chunk in the VM
-    const result = vm.interpret(&chunk);
+    const result = vm.interpret_chunk(&chunk);
     try std.testing.expectEqual(vm.InterpretResult.OK, result);
 }
 

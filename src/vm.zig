@@ -5,6 +5,7 @@ const ValueArray = @import("value.zig").ValueArray;
 const values = @import("value.zig");
 const debug = @import("debug.zig");
 const std = @import("std");
+const compiler = @import("compiler.zig");
 
 const DEBUG_TRACE_EXECUTION = true;
 
@@ -23,7 +24,12 @@ pub const InterpretResult = enum { OK, COMPILE_ERROR, RUNTIME_ERROR };
 
 var vm: VM = .{ .chunk = undefined, .ip = undefined, .stack = undefined, .stack_top = undefined };
 
-pub fn interpret(chunk: *const Chunk) InterpretResult {
+pub fn interpret(source: []const u8) InterpretResult {
+    compiler.compile(source);
+    return InterpretResult.OK;
+}
+
+pub fn interpret_chunk(chunk: *const Chunk) InterpretResult {
     vm.chunk = chunk;
     vm.ip = vm.chunk.code.?.ptr;
     return run();
@@ -179,7 +185,7 @@ test "intepret simple chunk" {
     };
 
     init_vm();
-    const result = interpret(&chunk);
+    const result = interpret_chunk(&chunk);
     try std.testing.expectEqual(InterpretResult.OK, result);
 }
 
