@@ -37,6 +37,7 @@ pub fn scan_token() !Token {
     if (is_at_end()) return make_token(TokenType.EOF);
 
     const c = advance();
+    if (is_alpha(c)) return identifier();
     return switch (c) {
         '(' => make_token(TokenType.LEFT_PAREN),
         ')' => make_token(TokenType.RIGHT_PAREN),
@@ -94,6 +95,58 @@ fn string() !Token {
     // Advance past the closing quote
     _ = advance();
     return make_token(TokenType.STRING);
+}
+
+fn identifier() Token {
+    while (is_alpha(peek()) or is_digit(peek())) _ = advance();
+    return make_token(identfier_type());
+}
+
+fn identfier_type() TokenType {
+    return switch (scanner.start[0]) {
+        'a' => check_keyword(1, "nd", TokenType.AND),
+        'c' => check_keyword(1, "lass", TokenType.CLASS),
+        'e' => check_keyword(1, "lse", TokenType.ELSE),
+        'f' => if (scanner.current[0] != scanner.start[1])
+            // Only check next char if token is longer than one char
+            switch (scanner.start[1]) {
+                'a' => check_keyword(2, "lse", TokenType.FALSE),
+                'o' => check_keyword(2, "r", TokenType.FOR),
+                'u' => check_keyword(2, "n", TokenType.FUN),
+                else => TokenType.IDENTIFIER,
+            }
+        else
+            TokenType.IDENTIFIER,
+        'i' => check_keyword(1, "f", TokenType.IF),
+        'n' => check_keyword(1, "il", TokenType.NIL),
+        'o' => check_keyword(1, "r", TokenType.OR),
+        'p' => check_keyword(1, "rint", TokenType.PRINT),
+        'r' => check_keyword(1, "eturn", TokenType.RETURN),
+        's' => check_keyword(1, "uper", TokenType.SUPER),
+        't' => if (scanner.current[0] != scanner.start[1])
+            switch (scanner.start[1]) {
+                'h' => check_keyword(2, "is", TokenType.THIS),
+                'r' => check_keyword(2, "ue", TokenType.TRUE),
+                else => TokenType.IDENTIFIER,
+            }
+        else
+            TokenType.IDENTIFIER,
+        'v' => check_keyword(1, "ar", TokenType.VAR),
+        'w' => check_keyword(1, "hile", TokenType.WHILE),
+        else => TokenType.IDENTIFIER,
+    };
+}
+
+fn check_keyword(start: usize, rest: []const u8, ttype: TokenType) TokenType {
+    const token_length = @ptrToInt(scanner.current) - @ptrToInt(scanner.start);
+
+    if (token_length == start + rest.len and std.mem.eql(u8, scanner.start[start..token_length], rest)) {
+        return ttype;
+    }
+    return TokenType.IDENTIFIER;
+}
+fn is_alpha(c: u8) bool {
+    return ('a' <= c and c <= 'z') or ('A' <= c and c <= 'Z') or c == '_';
 }
 
 fn is_digit(c: u8) bool {
@@ -276,10 +329,80 @@ test "number literals" {
     }
 }
 
-test "scanning errors" {
-    // Unexpected chars:
-    // single forward slash /
-    // single equality sign =
-    // Illegal number formats: leading dot .11,
+test "reserved keywords" {
+    const source =
+        \\ and class else false for fun 
+        \\ if nil or print return super this true var while
+    ;
+    const expected = [_]TokenType{
+        TokenType.AND,
+        TokenType.CLASS,
+        TokenType.ELSE,
+        TokenType.FALSE,
+        TokenType.FOR,
+        TokenType.FUN,
+        TokenType.IF,
+        TokenType.NIL,
+        TokenType.OR,
+        TokenType.PRINT,
+        TokenType.RETURN,
+        TokenType.SUPER,
+        TokenType.THIS,
+        TokenType.TRUE,
+        TokenType.VAR,
+        TokenType.WHILE,
+    };
 
+    init_scanner(source);
+    for (expected) |ttype| {
+        const token = try scan_token();
+        try std.testing.expectEqual(ttype, token.type);
+    }
+
+    const eof_token = try scan_token();
+    try std.testing.expectEqual(TokenType.EOF, eof_token.type);
+    try std.testing.expectEqual(@as(usize, 2), eof_token.line);
+}
+
+test "indentifiers" {
+    const source =
+        \\ an andy _class class_ els3 else1 falsy forand funtimes 
+        \\ iff iif nilor _print print_ ret retu retur returnn ssuper 
+        \\ This thiS trUe Var wIhle
+    ;
+    const expected = [_]TokenType{TokenType.IDENTIFIER} ** 24;
+
+    init_scanner(source);
+    for (expected) |ttype| {
+        const token = try scan_token();
+        // std.debug.print("{s}\n", .{token.start[0..token.length]});
+        try std.testing.expectEqual(ttype, token.type);
+    }
+
+    const eof_token = try scan_token();
+    try std.testing.expectEqual(TokenType.EOF, eof_token.type);
+    try std.testing.expectEqual(@as(usize, 3), eof_token.line);
+}
+
+test "scanning errors" {
+    // Unexpected chars: \ [ ] : ^ | § ...
+    // Unterminated strings: "asd
+    const source =
+        \\ \[]:^|§$
+        \\ "ASD
+    ;
+    const expected = [_]ScannerError{ScannerError.UnexpectedToken} ** 9 ++ [_]ScannerError{ScannerError.UnterminatedString};
+
+    init_scanner(source);
+    for (expected) |expected_err| {
+        if (scan_token()) |token| {
+            std.debug.print("{s}\n", .{token.start[0..token.length]});
+        } else |err| {
+            try std.testing.expectEqual(expected_err, err);
+        }
+    }
+
+    const eof_token = try scan_token();
+    try std.testing.expectEqual(TokenType.EOF, eof_token.type);
+    try std.testing.expectEqual(@as(usize, 2), eof_token.line);
 }
