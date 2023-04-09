@@ -4,6 +4,8 @@ const values = @import("value.zig");
 const debug = @import("debug.zig");
 const vm = @import("vm.zig");
 
+const Allocator = std.mem.Allocator;
+
 fn repl() !void {
     const stdin = std.io.getStdIn().reader();
     var buffer: [1024]u8 = undefined;
@@ -16,7 +18,7 @@ fn repl() !void {
             std.debug.print("\n", .{});
             break;
         }
-        intepret(buffer[0..]);
+        _ = vm.interpret(buffer[0..]);
     }
 }
 
@@ -77,6 +79,8 @@ fn run_file(allocator: Allocator, path: []const u8) !void {
 
 pub fn main() !void {
     // Setup allocator
+    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = general_purpose_allocator.allocator();
 
     vm.init_vm();
     defer vm.free_vm();

@@ -166,7 +166,7 @@ test "push and pop" {
     try std.testing.expectEqual(Value{ .double = 3.14 }, pop());
 }
 
-test "intepret simple chunk" {
+test "interpret simple chunk" {
     // Create a chunk
     var code = [_]u8{
         @enumToInt(OpCode.CONSTANT),
