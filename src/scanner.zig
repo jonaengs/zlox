@@ -1,6 +1,14 @@
 const std = @import("std");
+const TokenType = @import("token.zig").TokenType;
 
-const ScannerError = error{UnexpectedToken};
+// TODO: Convert everything to be methods on a scanner struct
+const ScannerError = error{
+    UnexpectedToken,
+    UnterminatedString,
+};
+
+const empty_str: *const [0:0]u8 = "";
+const EOF = empty_str[0];
 
 pub const Token = struct {
     type: TokenType,
@@ -48,6 +56,9 @@ pub fn scan_token() !Token {
         '<' => make_token(if (match('=')) TokenType.LESS_EQUAL else TokenType.LESS),
         '>' => make_token(if (match('=')) TokenType.GREATER_EQUAL else TokenType.GREATER),
 
+        // Literals
+        '"' => return string(),
+        '0'...'9' => return number(),
         else => ScannerError.UnexpectedToken,
     };
 }
@@ -63,9 +74,42 @@ fn skip_whitespace() void {
                 scanner.line += 1;
                 _ = advance();
             },
+            '/' => {
+                if (peek_next() == '/') {
+                    while (peek() != '\n' and !is_at_end()) _ = advance();
+                } else return;
+            },
             else => break,
         }
     }
+}
+
+fn string() !Token {
+    while (peek() != '"' and !is_at_end()) {
+        if (peek() == '\n') scanner.line += 1;
+        _ = advance();
+    }
+    if (is_at_end()) return ScannerError.UnterminatedString;
+
+    // Advance past the closing quote
+    _ = advance();
+    return make_token(TokenType.STRING);
+}
+
+fn is_digit(c: u8) bool {
+    return '0' <= c and c <= '9';
+}
+
+fn number() Token {
+    while (is_digit(peek())) _ = advance();
+
+    if (peek() == '.' and is_digit(peek_next())) {
+        // consume the dot and get rest of number
+        _ = advance();
+        while (is_digit(peek())) _ = advance();
+    }
+
+    return make_token(TokenType.NUMBER);
 }
 
 fn advance() u8 {
@@ -77,6 +121,10 @@ fn advance() u8 {
 fn peek() u8 {
     return scanner.current[0];
 }
+fn peek_next() u8 {
+    if (is_at_end()) return EOF;
+    return scanner.current[1];
+}
 
 fn match(expected: u8) bool {
     if (is_at_end()) return false;
@@ -87,7 +135,7 @@ fn match(expected: u8) bool {
 }
 
 fn is_at_end() bool {
-    return scanner.current[0] == ""[0];
+    return scanner.current[0] == EOF;
 }
 
 fn make_token(ttype: TokenType) Token {
@@ -115,56 +163,9 @@ pub fn init_scanner(source: []const u8) void {
     scanner.line = 1;
 }
 
-// Token Type enum. Placed at bottom because auto-format makes it long af
-//
-//
-pub const TokenType = enum {
-    // Single-character tokens.
-    LEFT_PAREN,
-    RIGHT_PAREN,
-    LEFT_BRACE,
-    RIGHT_BRACE,
-    COMMA,
-    DOT,
-    MINUS,
-    PLUS,
-    SEMICOLON,
-    SLASH,
-    STAR,
-    // One or two character tokens.
-    BANG,
-    BANG_EQUAL,
-    EQUAL,
-    EQUAL_EQUAL,
-    GREATER,
-    GREATER_EQUAL,
-    LESS,
-    LESS_EQUAL,
-    // Literals.
-    IDENTIFIER,
-    STRING,
-    NUMBER,
-    // Keywords.
-    AND,
-    CLASS,
-    ELSE,
-    FALSE,
-    FOR,
-    FUN,
-    IF,
-    NIL,
-    OR,
-    PRINT,
-    RETURN,
-    SUPER,
-    THIS,
-    TRUE,
-    VAR,
-    WHILE,
-
-    ERROR,
-    EOF,
-};
+////////////////
+// TESTS
+////////////////
 
 test "single character tokens" {
     const source =
@@ -225,7 +226,7 @@ test "comments" {
     init_scanner(source);
     const token = try scan_token();
     try std.testing.expectEqual(TokenType.EOF, token.type);
-    try std.testing.expectEqual(@as(usize, 3), token.line); // Each \n should increment line
+    try std.testing.expectEqual(@as(usize, 3), token.line);
 }
 
 test "whitespace" {
@@ -236,12 +237,49 @@ test "whitespace" {
     try std.testing.expectEqual(TokenType.EOF, token.type);
     try std.testing.expectEqual(@as(usize, 3), token.line); // Each \n should increment line
 }
+test "string literals" {
+    const source =
+        \\ "hello"
+        \\ "multi-line
+        \\ string"
+    ;
+    const expected = [_]TokenType{
+        TokenType.STRING,
+        TokenType.STRING,
+    };
 
-test "keyword tokens" {}
+    init_scanner(source);
+    for (expected) |ttype| {
+        const token = try scan_token();
+        try std.testing.expectEqual(ttype, token.type);
+    }
+    const eof_token = try scan_token();
+    try std.testing.expectEqual(TokenType.EOF, eof_token.type);
+    try std.testing.expectEqual(@as(usize, 3), eof_token.line);
+}
+
+test "number literals" {
+    const source = "3 123 195 0.11 987654.1230123";
+    const expected = [_]TokenType{
+        TokenType.NUMBER,
+        TokenType.NUMBER,
+        TokenType.NUMBER,
+        TokenType.NUMBER,
+        TokenType.NUMBER,
+        TokenType.EOF,
+    };
+
+    init_scanner(source);
+    for (expected) |ttype| {
+        const token = try scan_token();
+        try std.testing.expectEqual(ttype, token.type);
+    }
+}
 
 test "scanning errors" {
     // Unexpected chars:
     // single forward slash /
     // single equality sign =
+    // Illegal number formats: leading dot .11,
 
 }
