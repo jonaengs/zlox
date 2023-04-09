@@ -19,7 +19,7 @@ pub const Token = struct {
 
 // Same fields as Token
 pub const ErrorInfo = struct {
-    msg: []const u8,
+    message: []const u8,
     line: usize,
 };
 
@@ -200,9 +200,10 @@ fn make_token(ttype: TokenType) Token {
     };
 }
 
-pub fn get_error_info(comptime error_type: ScannerError) ErrorInfo {
+pub fn get_error_info(error_type: ScannerError) ErrorInfo {
     const message = switch (error_type) {
         error.UnexpectedToken => "Unexpected token.",
+        error.UnterminatedString => "Unterminated string.",
     };
     return ErrorInfo{
         .message = message,
@@ -405,4 +406,21 @@ test "scanning errors" {
     const eof_token = try scan_token();
     try std.testing.expectEqual(TokenType.EOF, eof_token.type);
     try std.testing.expectEqual(@as(usize, 2), eof_token.line);
+}
+
+test "error info" {
+    const source = "$ \"asd ";
+    init_scanner(source);
+    if (scan_token()) |_| unreachable else |err| {
+        try std.testing.expectEqual(ScannerError.UnexpectedToken, err);
+        const err_info = get_error_info(err);
+        try std.testing.expectEqual(@as(usize, 1), err_info.line);
+        try std.testing.expectEqualStrings("Unexpected token.", err_info.message);
+    }
+    if (scan_token()) |_| unreachable else |err| {
+        try std.testing.expectEqual(ScannerError.UnterminatedString, err);
+        const err_info = get_error_info(err);
+        try std.testing.expectEqual(@as(usize, 1), err_info.line);
+        try std.testing.expectEqualStrings("Unterminated string.", err_info.message);
+    }
 }
