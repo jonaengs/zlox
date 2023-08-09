@@ -1,67 +1,30 @@
 const std = @import("std");
+const memory = @import("memory.zig");
 
-const Allocator = std.mem.Allocator;
-
-const OpCode = enum { OP_RETURN };
-
-// TODO: Does Zig have a built-in list type that offers this structure, but better?
-pub const Chunk = struct {
-    count: usize, // Num actual elements in chunk
-    capacity: usize, // Num elements there's space allocated for in the chunk
-    code: ?[]u8,
+const OpCode = enum(u8) {
+    OP_RETURN,
 };
 
-pub inline fn create_chunk() Chunk {
-    var chunk = Chunk{ .count = undefined, .capacity = undefined, .code = undefined };
-    init_chunk(&chunk);
-    return chunk;
-}
+pub const Chunk = struct {
+    count: usize,
+    code: []u8,
+    // Drop 'capacity' because we use the fat-pointered Slice type
 
-pub fn free_chunk(allocator: Allocator, chunk: *Chunk) void {
-    // Free the data and set all fields to zero
-    if (chunk.code) |data| {
-        allocator.free(data);
-    }
-    init_chunk(chunk);
-}
-
-pub fn write_chunk(allocator: Allocator, chunk: *Chunk, byte: u8) void {
-    // TODO: Handle allocation failure
-    if (chunk.capacity <= chunk.count) {
-        // const old_capacity = chunk.capacity;
-        chunk.capacity = grow_capacity(chunk.capacity);
-        chunk.code = grow_array(allocator, chunk.code, chunk.capacity) catch unreachable;
+    pub fn init(self: *Chunk) void {
+        self.count = 0;
+        self.code = &.{}; // Accessing this would obviously be terrible
     }
 
-    if (chunk.code) |data| {
-        data[chunk.count] = byte;
-        chunk.count += 1;
-    } else {
-        unreachable;
+    pub fn write(self: *Chunk, allocator: std.mem.Allocator, byte: u8) !void {
+        if (self.code.len < self.count + 1) {
+            self.code = try memory.grow_array(allocator, self.code);
+        }
+        self.code[self.count] = byte;
+        self.count += 1;
     }
-}
 
-//// PRIVATE FUNCTIONS BELOW ////
-
-fn init_chunk(chunk: *Chunk) void {
-    chunk.count = 0;
-    chunk.capacity = 0;
-    chunk.code = null;
-}
-
-inline fn grow_capacity(cap: usize) usize {
-    return if (cap < 8) 8 else cap * 2;
-}
-
-inline fn grow_array(allocator: Allocator, pointer: ?[]u8, new_size: usize) ![]u8 {
-    // TODO: Handle allocation failure
-    // std.debug.print("Array size: {d}\n", .{new_size});
-    if (pointer) |data| {
-        // TODO: Try resize first, then realloc if it fails? Does resize automatically do this?
-        return try allocator.realloc(data, new_size);
-        // allocator.free(data);
-        // return allocator.alloc(u8, new_size);
-    } else {
-        return try allocator.alloc(u8, new_size);
+    pub fn free(self: *Chunk, allocator: std.mem.Allocator) void {
+        memory.free_array(allocator, self.code);
+        self.init();
     }
-}
+};

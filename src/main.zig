@@ -1,40 +1,41 @@
 const std = @import("std");
-const chunks = @import("chunk.zig");
+const Chunk = @import("chunk.zig").Chunk;
 
 pub fn main() !void {
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = general_purpose_allocator.allocator();
+    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = allocator.allocator();
 
-    var chunk = chunks.create_chunk();
-    chunks.init_chunk(&chunk);
-
-    chunks.write_chunk(gpa, &chunk, 1);
-
-    var i: i32 = 0;
-    while (i < 100) : (i += 1) {
-        chunks.write_chunk(gpa, &chunk, 1);
-    }
+    var chunk: Chunk = undefined;
+    chunk.init();
+    try chunk.write(gpa, 1);
+    chunk.free(gpa);
 }
 
-test "chunk allocation" {
-    // Setup allocator
-    var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = general_purpose_allocator.allocator();
+//
+//
+// TESTS
+//
 
-    // Setup a chunk
-    var chunk = chunks.create_chunk();
-    defer {
-        chunks.free_chunk(gpa, &chunk);
+test "chunk creation, writing and freeing doesn't crash" {
+    const allocator = std.testing.allocator;
+    var chunk: Chunk = undefined;
+
+    // Try simply initing, writing a single value, and freeing
+    chunk.init();
+    try chunk.write(allocator, 1);
+    chunk.free(allocator);
+
+    // Check that array growth happens as expected
+    // And that the chunk contents equal the values being written
+    for (1..14) |i| {
+        try chunk.write(allocator, @truncate(u8, i));
+        if (i <= 8) {
+            try std.testing.expect(chunk.code.len == 8);
+        } else {
+            try std.testing.expect(chunk.code.len == 16);
+        }
+        try std.testing.expect(chunk.code[i - 1] == i);
     }
-
-    // Insert 100 items into the chunk
-    var i: i32 = 0;
-    while (i < 100) : (i += 1) {
-        chunks.write_chunk(gpa, &chunk, 1);
-    }
-
-    // Check that code behaves as expected
-    try std.testing.expectEqual(@as(usize, 100), chunk.count);
-    try std.testing.expectEqual(@as(usize, 128), chunk.capacity);
-    try std.testing.expectEqual(@as(usize, 128), chunk.code.?.len);
+    chunk.free(allocator);
+    try std.testing.expect(chunk.code.len == 0);
 }
