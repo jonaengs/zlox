@@ -24,6 +24,16 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Add build options. Currently supported arguments:
+    // * trace_execution: Toggles VM execution debug printing
+    const build_options = b.addOptions();
+    build_options.addOption(
+        bool,
+        "trace_execution",
+        b.option(bool, "trace_execution", "print execution trace") orelse true,
+    );
+    exe.addOptions("build_options", build_options);
+
     // This declares intent for the executable to be installed into the
     // standard location when the user invokes the "install" step (the default
     // step when running `zig build`).
@@ -59,6 +69,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    unit_tests.addOptions("build_options", build_options); // add build_options to tests as well
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

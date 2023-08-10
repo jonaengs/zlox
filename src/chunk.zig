@@ -4,8 +4,17 @@ const Value = @import("value.zig").Value;
 const ValueArray = @import("value.zig").ValueArray;
 
 pub const OpCode = enum(u8) {
-    OP_RETURN,
     OP_CONSTANT,
+
+    // Arithmetics
+    OP_ADD,
+    OP_SUBTRACT,
+    OP_MULTIPLY,
+    OP_DIVIDE,
+    OP_NEGATE,
+
+    //
+    OP_RETURN,
 };
 
 /// Represents a portion (like a file?) of code

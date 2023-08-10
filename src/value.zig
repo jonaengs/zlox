@@ -8,6 +8,25 @@ const memory = @import("memory.zig");
 pub const Value = union(enum) {
     boolean: bool,
     double: f64,
+
+    pub fn print(self: *const Value) void {
+        std.debug.print("{}", .{self.*});
+    }
+
+    pub fn format(
+        self: *const Value,
+        comptime fmt: []const u8,
+        options: std.fmt.FormatOptions,
+        writer: anytype,
+    ) !void {
+        _ = fmt;
+        _ = options;
+
+        try switch (self.*) {
+            .double => |v| writer.print("{d:.2}", .{v}),
+            .boolean => |v| writer.print("{?}", .{v}),
+        };
+    }
 };
 
 pub const ValueArray = struct {

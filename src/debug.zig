@@ -13,7 +13,10 @@ pub fn dissasembleChunk(chunk: *Chunk, name: []const u8) void {
     }
 }
 
-fn dissasembleInstruction(chunk: *Chunk, offset: usize) usize {
+/// Print info about an instruction/opcode and its arguments.
+/// Format:
+/// code offset | line number | instruction [| constants  offset | value |]
+pub fn dissasembleInstruction(chunk: *Chunk, offset: usize) usize {
     std.debug.print("{d:04} ", .{offset});
 
     // Print line number, or "|" if same line as previous instruction
@@ -30,10 +33,10 @@ fn dissasembleInstruction(chunk: *Chunk, offset: usize) usize {
     const instruction = @as(OpCode, @enumFromInt(chunk.code[offset])); // renamed to "enumFromInt" in newer Zig versions
 
     switch (instruction) {
-        OpCode.OP_RETURN => {
+        .OP_RETURN, .OP_NEGATE, .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE => {
             return simpleInstruction(instruction, offset);
         },
-        OpCode.OP_CONSTANT => {
+        .OP_CONSTANT => {
             return constantInstruction(instruction, chunk, offset);
         },
     }
@@ -48,17 +51,9 @@ fn simpleInstruction(instr: OpCode, offset: usize) usize {
 
 fn constantInstruction(instr: OpCode, chunk: *Chunk, offset: usize) usize {
     const constant_idx = chunk.code[offset + 1]; // add 1 to skip opcode
-    std.debug.print("{s:<16} {d:04} '", .{ @tagName(instr), constant_idx });
-    printValue(chunk.constants.values[constant_idx]);
-    std.debug.print("'\n", .{});
+    const value = chunk.constants.values[constant_idx];
+    std.debug.print("{s:<16} {d:04} '{}'\n", .{ @tagName(instr), constant_idx, value });
     return offset + 2;
-}
-
-fn printValue(val: Value) void {
-    switch (val) {
-        Value.double => |v| std.debug.print("{d}", .{v}),
-        Value.boolean => |v| std.debug.print("{?}", .{v}),
-    }
 }
 
 //
