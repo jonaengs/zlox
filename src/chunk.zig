@@ -8,29 +8,43 @@ pub const OpCode = enum(u8) {
     OP_CONSTANT,
 };
 
+/// Represents a portion (like a file?) of code
 pub const Chunk = struct {
-    count: usize,
     // Drop 'capacity' because we use the fat-pointered Slice type
+    count: usize,
     code: []u8,
     constants: ValueArray,
+    lines: []usize, // line number of each item in self.code
+    // Better line encodings: 1. delta encoding with u8  2. only store line changes (array of offsets and their line)
 
     pub fn init(self: *Chunk) void {
         self.count = 0;
-        self.code = &.{}; // Accessing this would obviously be terrible
+        self.code = &.{};
+        self.lines = &.{};
         self.constants.init();
     }
 
-    pub fn write(self: *Chunk, allocator: std.mem.Allocator, byte: u8) !void {
+    pub fn write(
+        self: *Chunk,
+        allocator: std.mem.Allocator,
+        byte: u8,
+        line: usize,
+    ) !void {
         if (self.code.len < self.count + 1) {
             self.code = try memory.grow_array(allocator, self.code);
+            self.lines = try memory.grow_array(allocator, self.lines);
         }
         self.code[self.count] = byte;
+        self.lines[self.count] = line;
         self.count += 1;
     }
 
     pub fn free(self: *Chunk, allocator: std.mem.Allocator) void {
         memory.free_array(allocator, self.code);
+        memory.free_array(allocator, self.lines);
         self.constants.free(allocator);
+
+        // Make sure to not call init before all allocated memory has been freed
         self.init();
     }
 
@@ -40,7 +54,7 @@ pub const Chunk = struct {
         if (self.constants.count <= std.math.maxInt(u8)) {
             return @intCast(self.constants.count - 1);
         }
-        // TODO: Handle this case
+        // TODO: Handle this case (see chapter 14 challenge 2)
         unreachable;
     }
 };
