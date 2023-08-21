@@ -4,48 +4,82 @@ const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const VM = @import("vm.zig");
 
+fn repl() !void {
+    var buffer: [1024]u8 = undefined;
+    const stdin = std.io.getStdIn().reader();
+
+    while (true) {
+        std.debug.print("> ", .{});
+        // TODO: Handle inputs larger than buffer size gracefully
+        const bytes_read = try stdin.readAll(&buffer);
+        if (bytes_read == 0) {
+            std.debug.print("\n", .{});
+            break;
+        }
+
+        try VM.interpret(buffer[0..bytes_read :0]);
+    }
+}
+
+/// Reads the contents of the file in the path into a dynamically
+/// sized and allocated array
+fn readFile(allocator: std.mem.Allocator, path: []const u8) ![:0]const u8 {
+    // const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
+    // const contents: [:0]u8 = try file.reader().readAllAlloc(allocator, std.math.maxInt(u32));
+    // file.close();
+    // return contents;
+    const data = try std.fs.cwd().readFileAllocOptions(allocator, path, std.math.maxInt(usize), null, 8, 0);
+    return data;
+}
+
+fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
+    var source: [:0]const u8 = undefined;
+    if (readFile(allocator, path)) |data| {
+        source = data;
+    } else |err| {
+        switch (err) {
+            error.FileNotFound => {
+                std.debug.print("\nERROR: Could not find file: {s}.\n", .{path});
+            },
+            error.OutOfMemory => {
+                std.debug.print("\nERROR: Not enough memory to read: {s}.\n", .{path});
+            },
+            // error.ReadError => {
+            //     std.debug.print("\nERROR: Could not read file: {s}.\n", .{path});
+            // },
+            else => {
+                std.debug.print("\nERROR: Other I/O error: {s}.\n", .{path});
+            },
+        }
+        std.os.exit(74);
+    }
+    defer allocator.free(source);
+
+    VM.interpret(source) catch |err| switch (err) {
+        error.CompileError => std.process.exit(65),
+        error.RuntimeError => std.process.exit(70),
+    };
+}
+
 pub fn main() !void {
     // Setup allocator
     var allocator = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = allocator.allocator();
 
-    // Begin actual program
     VM.init();
-
-    var chunk: Chunk = undefined;
-    chunk.init();
-    defer chunk.free(gpa);
     defer VM.free();
 
-    // Push 1 to the stack
-    var constant: u8 = try chunk.addConstant(gpa, Value{ .double = 1.0 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-
-    // Evaluate -( -(1.2) + (-3.4) )
-    constant = try chunk.addConstant(gpa, Value{ .double = 1.2 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_NEGATE), 1);
-
-    constant = try chunk.addConstant(gpa, Value{ .double = -3.4 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_ADD), 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_NEGATE), 1);
-
-    // Return 1 * (ans / 4.6)
-    constant = try chunk.addConstant(gpa, Value{ .double = 4.6 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_DIVIDE), 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_MULTIPLY), 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_RETURN), 1);
-
-    // Execute
-    try VM.interpret(&chunk);
+    var args = try std.process.argsAlloc(gpa);
+    defer std.process.argsFree(gpa, args);
+    if (args.len == 1) {
+        try repl();
+    } else if (args.len == 2) {
+        runFile(gpa, args[1]);
+    } else {
+        // debug.print outputs to stderr
+        std.debug.print("Usage: zlox [path]\n", .{});
+        std.process.exit(64);
+    }
 }
 
 //
@@ -90,9 +124,7 @@ test "simple arithmetic doesn't crash" {
     try chunk.write(gpa, @intFromEnum(OpCode.OP_RETURN), 1);
 
     // Execute
-    try VM.interpret(&chunk);
-
-    try std.testing.expectEqual(@as(f64, 1), 1.0);
+    try VM.interpretChunk(&chunk);
 }
 
 test "add constant doesn't crash" {

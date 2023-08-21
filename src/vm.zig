@@ -1,7 +1,8 @@
 //! The Virtual Machine. Implementation relies on Zig
 //! treating files as structs. "Clients" will then do
 //! const VM = import("vm.zig");
-//! and treat the VM as a "singleton" struct.
+//! and treat the VM as a "singleton" struct -- i.e., we don't use fields
+//! but instead use members belonging to the struct declaration itself.
 //!
 //! This matches the book, which also uses only a single VM struct for everything.
 
@@ -12,6 +13,7 @@ const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const debug = @import("debug.zig");
+const compiler = @import("compiler.zig");
 
 const DEBUG_TRACE_EXECUTION = @import("build_options").trace_execution and !builtin.is_test;
 const STACK_MAX_SIZE = 256;
@@ -34,10 +36,12 @@ pub fn init() void {
     resetStack();
 }
 pub fn free() void {}
-pub fn interpret(arg_chunk: *Chunk) InterpreterError!void {
+pub fn interpret(source: [:0]const u8) InterpreterError!void {
+    compiler.compile(source);
+}
+pub fn interpretChunk(arg_chunk: *Chunk) InterpreterError!void {
     chunk = arg_chunk;
     ip = 0;
-
     return run();
 }
 
