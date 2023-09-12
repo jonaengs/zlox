@@ -4,20 +4,22 @@ const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const VM = @import("vm.zig");
 
-fn repl() !void {
-    var buffer: [1024]u8 = undefined;
+fn repl(allocator: std.mem.Allocator) !void {
+    var buffer = [_:0]u8{0} ** 1024;
     const stdin = std.io.getStdIn().reader();
 
     while (true) {
         std.debug.print("> ", .{});
         // TODO: Handle inputs larger than buffer size gracefully
-        const bytes_read = try stdin.readAll(&buffer);
+        const bytes_read = try stdin.read(&buffer);
         if (bytes_read == 0) {
             std.debug.print("\n", .{});
             break;
         }
 
-        try VM.interpret(buffer[0..bytes_read :0]);
+        buffer[bytes_read] = 0;
+        std.debug.print("--- Interpreting Result ---\n", .{});
+        try VM.interpret(allocator, buffer[0..bytes_read :0]);
     }
 }
 
@@ -55,7 +57,7 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
     }
     defer allocator.free(source);
 
-    VM.interpret(source) catch |err| switch (err) {
+    VM.interpret(allocator, source) catch |err| switch (err) {
         error.CompileError => std.process.exit(65),
         error.RuntimeError => std.process.exit(70),
     };
@@ -63,8 +65,8 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
 
 pub fn main() !void {
     // Setup allocator
-    var allocator = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = allocator.allocator();
+    var _allocator_maker = std.heap.GeneralPurposeAllocator(.{}){};
+    const gpa = _allocator_maker.allocator();
 
     VM.init();
     defer VM.free();
@@ -72,7 +74,7 @@ pub fn main() !void {
     var args = try std.process.argsAlloc(gpa);
     defer std.process.argsFree(gpa, args);
     if (args.len == 1) {
-        try repl();
+        try repl(gpa);
     } else if (args.len == 2) {
         runFile(gpa, args[1]);
     } else {

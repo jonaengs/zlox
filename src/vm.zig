@@ -36,9 +36,22 @@ pub fn init() void {
     resetStack();
 }
 pub fn free() void {}
-pub fn interpret(source: [:0]const u8) InterpreterError!void {
-    compiler.compile(source);
+pub fn interpret(allocator: std.mem.Allocator, source: [:0]const u8) InterpreterError!void {
+    var _chunk: Chunk = undefined;
+    _chunk.init();
+    defer _chunk.free(allocator);
+
+    // Translate source into VM instructions
+    try compiler.compile(allocator, source, &_chunk);
+
+    // Bind chunk to VM
+    chunk = &_chunk;
+    ip = 0;
+
+    // Execute chunk
+    try run();
 }
+
 pub fn interpretChunk(arg_chunk: *Chunk) InterpreterError!void {
     chunk = arg_chunk;
     ip = 0;
@@ -105,7 +118,7 @@ pub fn run() InterpreterError!void {
                 // Needed because 'zig build test' behaves strangely on release 0.11, printing
                 // errors when there are none (as well as omitting the test summary statistics)
                 if (DEBUG_TRACE_EXECUTION) {
-                    std.debug.print("{}\n", .{value});
+                    std.debug.print("RETURN:\n{}\n", .{value});
                 }
                 return;
             },

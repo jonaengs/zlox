@@ -26,11 +26,17 @@ pub fn build(b: *std.Build) void {
 
     // Add build options. Currently supported arguments:
     // * trace_execution: Toggles VM execution debug printing
+    // * print_code: Toggles printing of bytecode of compiled Chunks
     const build_options = b.addOptions();
     build_options.addOption(
         bool,
         "trace_execution",
         b.option(bool, "trace_execution", "print execution trace") orelse true,
+    );
+    build_options.addOption(
+        bool,
+        "print_code",
+        b.option(bool, "print_code", "print bytecode of chunks") orelse true,
     );
     exe.addOptions("build_options", build_options);
 

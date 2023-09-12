@@ -1,5 +1,6 @@
 const std = @import("std");
 const memory = @import("memory.zig");
+const debug = @import("debug.zig");
 const Value = @import("value.zig").Value;
 const ValueArray = @import("value.zig").ValueArray;
 
