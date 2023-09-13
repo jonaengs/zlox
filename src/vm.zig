@@ -90,28 +90,55 @@ pub fn run() InterpreterError!void {
                 const value = read_constant();
                 push(value);
             },
-            .OP_NEGATE => {
-                // Could likely be optimized by simply modifying the value right on the stack (see challenge 15.4)
-                const val = pop();
-                std.debug.assert(val == Value.double); // TODO: Handle illegal negation more gracefully
-                push(Value{ .double = -val.double });
+            .OP_NIL => {
+                push(Value{ .nil = 0.0 });
             },
-            .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE => {
-                // Only handle doubles for now
+            .OP_TRUE => {
+                push(Value{ .boolean = true });
+            },
+            .OP_FALSE => {
+                push(Value{ .boolean = false });
+            },
+            .OP_EQUAL => {
                 const b = pop();
                 const a = pop();
-                std.debug.assert(b == Value.double);
-                std.debug.assert(a == Value.double);
-                // TODO: Get rid of nested switch
-                push(Value{
-                    .double = switch (instruction) {
-                        .OP_ADD => a.double + b.double,
-                        .OP_SUBTRACT => a.double - b.double,
-                        .OP_MULTIPLY => a.double * b.double,
-                        .OP_DIVIDE => a.double / b.double, // TODO: Handle division by zero?
+                // std.meta.eql should first compare tags, then values if tags equal (https://github.com/ziglang/zig/issues/2251#issuecomment-1476915212)
+                // Comparing bits directly is not a good idea. See final part of chapter 18 for why
+                push(Value{ .boolean = std.meta.eql(a, b) });
+            },
+            .OP_NEGATE => {
+                // Could likely be optimized by simply modifying the value right on the stack (see challenge 15.4)
+                const val = peek(0);
+                if (val != Value.number) {
+                    runtimeError("Operand of negation must be a number.", .{});
+                    return InterpreterError.RuntimeError;
+                }
+                push(Value{ .number = -pop().number });
+            },
+            .OP_NOT => {
+                push(Value{ .boolean = isFalsey(pop()) });
+            },
+            .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE, .OP_GREATER, .OP_LESS => {
+                // TODO: Get rid of nested switch: Extract logic into a function.
+                // Pass operator as enum. Inside function do a comptime switch on operator.
+                // And make function inline.
+                if (peek(0) != Value.number or peek(1) != Value.number) {
+                    runtimeError("Operands must be numbers.", .{});
+                    return InterpreterError.RuntimeError;
+                }
+                const b = pop();
+                const a = pop();
+                push(
+                    switch (instruction) {
+                        .OP_ADD => Value{ .number = a.number + b.number },
+                        .OP_SUBTRACT => Value{ .number = a.number - b.number },
+                        .OP_MULTIPLY => Value{ .number = a.number * b.number },
+                        .OP_DIVIDE => Value{ .number = a.number / b.number }, // TODO: Handle division by zero?
+                        .OP_GREATER => Value{ .boolean = a.number > b.number },
+                        .OP_LESS => Value{ .boolean = a.number < b.number },
                         else => unreachable, // actually unreachable
                     },
-                });
+                );
             },
             .OP_RETURN => {
                 const value = pop();
@@ -124,6 +151,26 @@ pub fn run() InterpreterError!void {
             },
         }
     }
+}
+
+fn isFalsey(val: Value) bool {
+    return val == Value.nil or (val == Value.boolean and !val.boolean);
+}
+
+/// Takes a format string and the arguments to the format
+/// (as an anonymous struct)
+fn runtimeError(comptime format: []const u8, fargs: anytype) void {
+    std.debug.print(format, fargs);
+    std.debug.print("\n", .{});
+
+    const instruction = ip - 1;
+    const line = chunk.lines[instruction];
+    std.debug.print("[line {d}] in script\n", .{line});
+    resetStack();
+}
+
+fn peek(distance: usize) Value {
+    return stack[sp - 1 - distance];
 }
 
 fn resetStack() void {
@@ -146,9 +193,9 @@ fn pop() Value {
 //
 
 test "simple stack operations" {
-    const v1 = Value{ .double = 1.0 };
-    const v2 = Value{ .double = 2.0 };
-    const v3 = Value{ .double = 3.0 };
+    const v1 = Value{ .number = 1.0 };
+    const v2 = Value{ .number = 2.0 };
+    const v3 = Value{ .number = 3.0 };
 
     resetStack();
     try std.testing.expectEqual(@as(u8, 0), sp);
@@ -157,13 +204,13 @@ test "simple stack operations" {
     try std.testing.expectEqual(@as(u8, 2), sp);
 
     // Check popping
-    try std.testing.expectEqual(Value{ .double = 2.0 }, pop());
+    try std.testing.expectEqual(Value{ .number = 2.0 }, pop());
     try std.testing.expectEqual(@as(u8, 1), sp);
 
     // Push after pop overwriting values
     push(v3);
     try std.testing.expectEqual(@as(u8, 2), sp);
-    try std.testing.expectEqual(Value{ .double = 3.0 }, pop());
+    try std.testing.expectEqual(Value{ .number = 3.0 }, pop());
     _ = pop();
     try std.testing.expectEqual(@as(u8, 0), sp);
 }

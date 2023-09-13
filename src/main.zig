@@ -99,17 +99,17 @@ test "simple arithmetic doesn't crash" {
     defer VM.free();
 
     // Push 1 to the stack
-    var constant: u8 = try chunk.addConstant(gpa, Value{ .double = 1.0 });
+    var constant: u8 = try chunk.addConstant(gpa, Value{ .number = 1.0 });
     try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
     try chunk.write(gpa, constant, 1);
 
     // Evaluate -( -(1.2) + (-3.4) )
-    constant = try chunk.addConstant(gpa, Value{ .double = 1.2 });
+    constant = try chunk.addConstant(gpa, Value{ .number = 1.2 });
     try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
     try chunk.write(gpa, constant, 1);
     try chunk.write(gpa, @intFromEnum(OpCode.OP_NEGATE), 1);
 
-    constant = try chunk.addConstant(gpa, Value{ .double = -3.4 });
+    constant = try chunk.addConstant(gpa, Value{ .number = -3.4 });
     try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
     try chunk.write(gpa, constant, 1);
 
@@ -117,7 +117,7 @@ test "simple arithmetic doesn't crash" {
     try chunk.write(gpa, @intFromEnum(OpCode.OP_NEGATE), 1);
 
     // Return 1 * (ans / 4.6)
-    constant = try chunk.addConstant(gpa, Value{ .double = 4.6 });
+    constant = try chunk.addConstant(gpa, Value{ .number = 4.6 });
     try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
     try chunk.write(gpa, constant, 1);
 
@@ -134,7 +134,7 @@ test "add constant doesn't crash" {
     var chunk: Chunk = undefined;
     chunk.init();
 
-    const constant = try chunk.addConstant(allocator, Value{ .double = 1.2 });
+    const constant = try chunk.addConstant(allocator, Value{ .number = 1.2 });
     try chunk.write(allocator, @intFromEnum(OpCode.OP_CONSTANT), 1);
     try chunk.write(allocator, constant, 1);
 
@@ -143,7 +143,7 @@ test "add constant doesn't crash" {
     // then the index
     try std.testing.expectEqual(@as(usize, 0), chunk.code[1]);
     // Expect the index to lead to the correct value
-    try std.testing.expectEqual(@as(f64, 1.2), chunk.constants.values[0].double);
+    try std.testing.expectEqual(@as(f64, 1.2), chunk.constants.values[0].number);
 
     // Expect both code and constants arrays to have length 8 before free
     try std.testing.expectEqual(@as(usize, 8), chunk.code.len);

@@ -38,31 +38,31 @@ const rules = rules_blk: {
     _rules.set(.SEMICOLON, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.SLASH, ParseRule{ .prefix = null, .infix = binary, .precedence = .FACTOR });
     _rules.set(.STAR, ParseRule{ .prefix = null, .infix = binary, .precedence = .FACTOR });
-    _rules.set(.BANG, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.BANG_EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.BANG, ParseRule{ .prefix = unary, .infix = null, .precedence = .NONE });
+    _rules.set(.BANG_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .EQUALITY });
     _rules.set(.EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.EQUAL_EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.GREATER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.GREATER_EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.LESS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.LESS_EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.EQUAL_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .EQUALITY });
+    _rules.set(.GREATER, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.GREATER_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.LESS, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.LESS_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
     _rules.set(.IDENTIFIER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.STRING, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.NUMBER, ParseRule{ .prefix = number, .infix = null, .precedence = .NONE });
     _rules.set(.AND, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.CLASS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.ELSE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.FALSE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.FALSE, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
     _rules.set(.FOR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.FUN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.IF, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.NIL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.NIL, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
     _rules.set(.OR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.PRINT, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.RETURN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.SUPER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.THIS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.TRUE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.TRUE, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
     _rules.set(.VAR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.WHILE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.ERROR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
@@ -160,10 +160,19 @@ fn expression() void {
     parsePrecedence(.ASSIGNMENT);
 }
 
+fn literal() void {
+    switch (parser.previous.ttype) {
+        .FALSE => emitByte(.OP_FALSE),
+        .NIL => emitByte(.OP_NIL),
+        .TRUE => emitByte(.OP_TRUE),
+        else => unreachable,
+    }
+}
+
 fn number() void {
     // Parser has already decided that this is a valid float format-wise.
     const value: f64 = parseFloat(f64, parser.previous.slice) catch unreachable;
-    emitConstant(Value{ .double = value });
+    emitConstant(Value{ .number = value });
 }
 
 fn grouping() void {
@@ -179,7 +188,7 @@ fn unary() void {
 
     switch (operatorType) {
         .MINUS => emitByte(.OP_NEGATE),
-        // TODO: ! operator
+        .BANG => emitByte(.OP_NOT),
         else => unreachable,
     }
 }
@@ -196,6 +205,13 @@ fn binary() void {
         .MINUS => emitByte(.OP_SUBTRACT),
         .STAR => emitByte(.OP_MULTIPLY),
         .SLASH => emitByte(.OP_DIVIDE),
+        .BANG_EQUAL => emitBytes(.OP_EQUAL, .OP_NOT),
+        .EQUAL_EQUAL => emitByte(.OP_EQUAL),
+        // Note: GTE and LTE operators are currently wrong for NaN comparisons. All comparisons should return false, like so: (1 < NaN == False) and (1 >= NaN == False)
+        .GREATER => emitByte(.OP_GREATER),
+        .GREATER_EQUAL => emitBytes(.OP_LESS, .OP_NOT),
+        .LESS => emitByte(.OP_LESS),
+        .LESS_EQUAL => emitBytes(.OP_GREATER, .OP_NOT),
         else => unreachable,
     }
 }

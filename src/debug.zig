@@ -30,16 +30,14 @@ pub fn dissasembleInstruction(chunk: *Chunk, offset: usize) usize {
     // 1. Conversion should never fail
     // 2. The cast is safety-checked, so the program will fail with a proper error message and trace
     // 3. Our only real option if something goes wrong here is to crash, which we do
-    const instruction = @as(OpCode, @enumFromInt(chunk.code[offset])); // renamed to "enumFromInt" in newer Zig versions
+    const instruction = @as(OpCode, @enumFromInt(chunk.code[offset]));
 
-    switch (instruction) {
-        .OP_RETURN, .OP_NEGATE, .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE => {
-            return simpleInstruction(instruction, offset);
-        },
-        .OP_CONSTANT => {
-            return constantInstruction(instruction, chunk, offset);
-        },
-    }
+    return switch (instruction) {
+        .OP_RETURN, .OP_NEGATE, .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE => simpleInstruction(instruction, offset),
+        .OP_CONSTANT => constantInstruction(instruction, chunk, offset),
+        .OP_NIL, .OP_TRUE, .OP_FALSE, .OP_NOT => simpleInstruction(instruction, offset),
+        .OP_EQUAL, .OP_GREATER, .OP_LESS => simpleInstruction(instruction, offset),
+    };
 }
 
 /// Instructions which take no arguments.
@@ -72,7 +70,7 @@ test "print chunk with constant" {
     chunk.init();
     defer chunk.free(allocator);
 
-    const constant = try chunk.addConstant(allocator, Value{ .double = 1.2 });
+    const constant = try chunk.addConstant(allocator, Value{ .number = 1.2 });
     try chunk.write(allocator, @intFromEnum(OpCode.OP_CONSTANT), 1);
     try chunk.write(allocator, constant, 1);
     try chunk.write(allocator, @intFromEnum(OpCode.OP_RETURN), 1);

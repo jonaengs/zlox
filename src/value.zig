@@ -7,7 +7,8 @@ const memory = @import("memory.zig");
 // would otherwise be needed to make the code look good
 pub const Value = union(enum) {
     boolean: bool,
-    double: f64,
+    number: f64,
+    nil: f64,
 
     pub fn print(self: *const Value) void {
         std.debug.print("{}", .{self.*});
@@ -23,8 +24,9 @@ pub const Value = union(enum) {
         _ = options;
 
         try switch (self.*) {
-            .double => |v| writer.print("{d:.2}", .{v}),
-            .boolean => |v| writer.print("{?}", .{v}),
+            .number => |v| writer.print("{d:.2}", .{v}),
+            .boolean => |v| writer.print("{}", .{v}),
+            .nil => |_| writer.print("nil", .{}),
         };
     }
 };

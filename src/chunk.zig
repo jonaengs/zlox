@@ -5,13 +5,23 @@ const Value = @import("value.zig").Value;
 const ValueArray = @import("value.zig").ValueArray;
 
 pub const OpCode = enum(u8) {
+    // Values
     OP_CONSTANT,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
+
+    // Comparisons
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
 
     // Arithmetics
     OP_ADD,
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_NOT,
     OP_NEGATE,
 
     //
