@@ -4,7 +4,7 @@ const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
 const VM = @import("vm.zig");
 
-fn repl(allocator: std.mem.Allocator) !void {
+fn repl() !void {
     var buffer = [_:0]u8{0} ** 1024;
     const stdin = std.io.getStdIn().reader();
 
@@ -19,7 +19,7 @@ fn repl(allocator: std.mem.Allocator) !void {
 
         buffer[bytes_read] = 0;
         std.debug.print("--- Interpreting Result ---\n", .{});
-        try VM.interpret(allocator, buffer[0..bytes_read :0]);
+        try VM.interpret(buffer[0..bytes_read :0]);
     }
 }
 
@@ -57,7 +57,7 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
     }
     defer allocator.free(source);
 
-    VM.interpret(allocator, source) catch |err| switch (err) {
+    VM.interpret(source) catch |err| switch (err) {
         error.CompileError => std.process.exit(65),
         error.RuntimeError => std.process.exit(70),
     };
@@ -68,13 +68,13 @@ pub fn main() !void {
     var _allocator_maker = std.heap.GeneralPurposeAllocator(.{}){};
     const gpa = _allocator_maker.allocator();
 
-    VM.init();
+    VM.init(gpa);
     defer VM.free();
 
     var args = try std.process.argsAlloc(gpa);
     defer std.process.argsFree(gpa, args);
     if (args.len == 1) {
-        try repl(gpa);
+        try repl();
     } else if (args.len == 2) {
         runFile(gpa, args[1]);
     } else {
@@ -88,46 +88,6 @@ pub fn main() !void {
 //
 // TESTS
 //
-
-test "simple arithmetic doesn't crash" {
-    // Setup
-    const gpa = std.testing.allocator;
-    VM.init();
-    var chunk: Chunk = undefined;
-    chunk.init();
-    defer chunk.free(gpa);
-    defer VM.free();
-
-    // Push 1 to the stack
-    var constant: u8 = try chunk.addConstant(gpa, Value{ .number = 1.0 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-
-    // Evaluate -( -(1.2) + (-3.4) )
-    constant = try chunk.addConstant(gpa, Value{ .number = 1.2 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_NEGATE), 1);
-
-    constant = try chunk.addConstant(gpa, Value{ .number = -3.4 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_ADD), 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_NEGATE), 1);
-
-    // Return 1 * (ans / 4.6)
-    constant = try chunk.addConstant(gpa, Value{ .number = 4.6 });
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_CONSTANT), 1);
-    try chunk.write(gpa, constant, 1);
-
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_DIVIDE), 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_MULTIPLY), 1);
-    try chunk.write(gpa, @intFromEnum(OpCode.OP_RETURN), 1);
-
-    // Execute
-    try VM.interpretChunk(&chunk);
-}
 
 test "add constant doesn't crash" {
     const allocator = std.testing.allocator;

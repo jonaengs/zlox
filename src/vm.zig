@@ -12,8 +12,12 @@ const builtin = @import("builtin");
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
+const Obj = @import("object.zig").Obj;
+const ObjString = @import("object.zig").ObjString;
 const debug = @import("debug.zig");
 const compiler = @import("compiler.zig");
+const takeString = @import("object.zig").takeString;
+const freeObjects = @import("memory.zig").freeObjects;
 
 const DEBUG_TRACE_EXECUTION = @import("build_options").trace_execution and !builtin.is_test;
 const STACK_MAX_SIZE = 256;
@@ -30,13 +34,18 @@ var chunk: *Chunk = undefined; // Chunk currently being intepreted
 var ip: usize = 0; // Instruction pointer for the chunk's code
 var stack: [STACK_MAX_SIZE]Value = undefined;
 var sp: u8 = 0; // Points one past the top element of the stack
-// While the C standard allows pointing one past the end of an array, I'm not sure how Zig feels about it. I guess I'll find out soon enough.
+pub var objects: ?*Obj = undefined; // Newest element in the objects singly-linked list
+var allocator: std.mem.Allocator = undefined;
 
-pub fn init() void {
+pub fn init(_allocator: std.mem.Allocator) void {
     resetStack();
+    objects = null;
+    allocator = _allocator;
 }
-pub fn free() void {}
-pub fn interpret(allocator: std.mem.Allocator, source: [:0]const u8) InterpreterError!void {
+pub fn free() void {
+    freeObjects(allocator);
+}
+pub fn interpret(source: [:0]const u8) InterpreterError!void {
     var _chunk: Chunk = undefined;
     _chunk.init();
     defer _chunk.free(allocator);
@@ -50,12 +59,6 @@ pub fn interpret(allocator: std.mem.Allocator, source: [:0]const u8) Interpreter
 
     // Execute chunk
     try run();
-}
-
-pub fn interpretChunk(arg_chunk: *Chunk) InterpreterError!void {
-    chunk = arg_chunk;
-    ip = 0;
-    return run();
 }
 
 inline fn read_constant() Value {
@@ -102,9 +105,18 @@ pub fn run() InterpreterError!void {
             .OP_EQUAL => {
                 const b = pop();
                 const a = pop();
-                // std.meta.eql should first compare tags, then values if tags equal (https://github.com/ziglang/zig/issues/2251#issuecomment-1476915212)
-                // Comparing bits directly is not a good idea. See final part of chapter 18 for why
-                push(Value{ .boolean = std.meta.eql(a, b) });
+                switch (a) {
+                    .obj => |aObj| {
+                        if (b != Value.obj) {
+                            push(Value{ .boolean = false });
+                        } else {
+                            push(Value{ .boolean = aObj.isEqual(b.obj) });
+                        }
+                    },
+                    // Comparing bits directly is not a good idea. See final part of chapter 18 for why
+                    // std.meta.eql should first compare tags, then values if tags equal (https://github.com/ziglang/zig/issues/2251#issuecomment-1476915212)
+                    else => push(Value{ .boolean = std.meta.eql(a, b) }),
+                }
             },
             .OP_NEGATE => {
                 // Could likely be optimized by simply modifying the value right on the stack (see challenge 15.4)
@@ -118,28 +130,18 @@ pub fn run() InterpreterError!void {
             .OP_NOT => {
                 push(Value{ .boolean = isFalsey(pop()) });
             },
-            .OP_ADD, .OP_SUBTRACT, .OP_MULTIPLY, .OP_DIVIDE, .OP_GREATER, .OP_LESS => {
-                // TODO: Get rid of nested switch: Extract logic into a function.
-                // Pass operator as enum. Inside function do a comptime switch on operator.
-                // And make function inline.
-                if (peek(0) != Value.number or peek(1) != Value.number) {
-                    runtimeError("Operands must be numbers.", .{});
-                    return InterpreterError.RuntimeError;
+            .OP_ADD => {
+                if (peek(0).isString() and peek(1).isString()) {
+                    concatenate();
+                } else {
+                    try arithmeticOp(.OP_ADD);
                 }
-                const b = pop();
-                const a = pop();
-                push(
-                    switch (instruction) {
-                        .OP_ADD => Value{ .number = a.number + b.number },
-                        .OP_SUBTRACT => Value{ .number = a.number - b.number },
-                        .OP_MULTIPLY => Value{ .number = a.number * b.number },
-                        .OP_DIVIDE => Value{ .number = a.number / b.number }, // TODO: Handle division by zero?
-                        .OP_GREATER => Value{ .boolean = a.number > b.number },
-                        .OP_LESS => Value{ .boolean = a.number < b.number },
-                        else => unreachable, // actually unreachable
-                    },
-                );
             },
+            .OP_SUBTRACT => try arithmeticOp(.OP_SUBTRACT),
+            .OP_MULTIPLY => try arithmeticOp(.OP_MULTIPLY),
+            .OP_DIVIDE => try arithmeticOp(.OP_DIVIDE),
+            .OP_GREATER => try arithmeticOp(.OP_GREATER),
+            .OP_LESS => try arithmeticOp(.OP_LESS),
             .OP_RETURN => {
                 const value = pop();
                 // Needed because 'zig build test' behaves strangely on release 0.11, printing
@@ -155,6 +157,37 @@ pub fn run() InterpreterError!void {
 
 fn isFalsey(val: Value) bool {
     return val == Value.nil or (val == Value.boolean and !val.boolean);
+}
+
+inline fn arithmeticOp(comptime operation: OpCode) !void {
+    // TODO: We peek twice for OP_ADD. Maybe fix when optimizing
+    if (peek(0) != Value.number or peek(1) != Value.number) {
+        runtimeError("Operands must be numbers.", .{});
+        return InterpreterError.RuntimeError;
+    }
+    const b = pop();
+    const a = pop();
+
+    switch (operation) {
+        .OP_ADD => push(Value{ .number = a.number + b.number }),
+        .OP_SUBTRACT => push(Value{ .number = a.number - b.number }),
+        .OP_MULTIPLY => push(Value{ .number = a.number * b.number }),
+        .OP_DIVIDE => push(Value{ .number = a.number / b.number }), // TODO: Handle division by zero?
+        .OP_GREATER => push(Value{ .boolean = a.number > b.number }),
+        .OP_LESS => push(Value{ .boolean = a.number < b.number }),
+        else => unreachable, // actually unreachable
+    }
+}
+
+fn concatenate() void {
+    const b = pop().obj.as(ObjString);
+    const a = pop().obj.as(ObjString);
+
+    const slices = [2][]u8{ a.chars[0..a.length], b.chars[0..b.length] };
+    var chars = std.mem.concat(allocator, u8, &slices) catch @panic("OOM at string concat");
+
+    const result = takeString(allocator, chars);
+    push(Value{ .obj = @ptrCast(result) });
 }
 
 /// Takes a format string and the arguments to the format

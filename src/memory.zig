@@ -1,6 +1,9 @@
 //! Functions for dealing with allocation and deallocation of memory
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const VM = @import("vm.zig");
+const Obj = @import("object.zig").Obj;
+const ObjString = @import("object.zig").ObjString;
 
 /// Double the slice's length (and size), or set its length to 8 if shorter.
 /// 'slice' parameter must be a slice
@@ -12,6 +15,25 @@ pub fn grow_array(allocator: Allocator, slice: anytype) !@TypeOf(slice) {
 /// Free the given slice
 pub fn free_array(allocator: Allocator, slice: anytype) void {
     return allocator.free(slice);
+}
+
+pub fn freeObjects(allocator: Allocator) void {
+    var object = VM.objects;
+    while (object) |obj| {
+        const next = obj.next;
+        freeObject(allocator, obj);
+        object = next;
+    }
+}
+
+fn freeObject(allocator: Allocator, object: *Obj) void {
+    switch (object.otype) {
+        .STRING => {
+            const string = object.as(ObjString);
+            allocator.free(string.chars[0..string.length]);
+            allocator.destroy(string);
+        },
+    }
 }
 
 //

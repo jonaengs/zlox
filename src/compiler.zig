@@ -8,6 +8,7 @@ const TokenType = @import("scanner.zig").TokenType;
 const Chunk = @import("chunk.zig").Chunk;
 const OpCode = @import("chunk.zig").OpCode;
 const Value = @import("value.zig").Value;
+const copyString = @import("object.zig").copyString;
 
 const DEBUG_PRINT_CODE = @import("build_options").print_code and !builtin.is_test;
 
@@ -47,7 +48,7 @@ const rules = rules_blk: {
     _rules.set(.LESS, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
     _rules.set(.LESS_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
     _rules.set(.IDENTIFIER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.STRING, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.STRING, ParseRule{ .prefix = string, .infix = null, .precedence = .NONE });
     _rules.set(.NUMBER, ParseRule{ .prefix = number, .infix = null, .precedence = .NONE });
     _rules.set(.AND, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
     _rules.set(.CLASS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
@@ -175,6 +176,10 @@ fn number() void {
     emitConstant(Value{ .number = value });
 }
 
+fn string() void {
+    emitConstant(Value.makeString(copyString(currentAllocator, parser.previous.slice)));
+}
+
 fn grouping() void {
     expression();
     consume(.RIGHT_PAREN, "Expect ')' after expression.");
@@ -221,7 +226,7 @@ fn makeConstant(value: Value) u8 {
         reportError("Too many constants in one chunk");
         break :blk 0;
     };
-    // TODO: Handle more constants than can fit in the array. Should probably at least panic/crash
+    // TODO: Handle more constants than can fit in the array better
     return constant_idx;
 }
 

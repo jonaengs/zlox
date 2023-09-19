@@ -1,14 +1,26 @@
 //! Representation of constant values encountered in a program
 const std = @import("std");
 const memory = @import("memory.zig");
+const Obj = @import("object.zig").Obj;
+const ObjString = @import("object.zig").ObjString;
 
-// Make Value a tagged union early, as we will have to do so later anyways,
-// and this will remove the need for a lot type-trickery that
-// would otherwise be needed to make the code look good
+/// Internal representation of all values permitted by Lox
 pub const Value = union(enum) {
     boolean: bool,
     number: f64,
     nil: f64,
+    obj: *Obj,
+
+    /// Convenience function for casting *ObjString to *Obj
+    /// and putting it in a Value.
+    pub fn makeString(objString: *ObjString) Value {
+        return Value{ .obj = @ptrCast(objString) };
+    }
+
+    /// Convenience function for checking whether a Value is an Obj with type ObjString
+    pub fn isString(self: *const Value) bool {
+        return self.* == Value.obj and Obj.isObjType(self.*, .STRING);
+    }
 
     pub fn print(self: *const Value) void {
         std.debug.print("{}", .{self.*});
@@ -27,6 +39,12 @@ pub const Value = union(enum) {
             .number => |v| writer.print("{d:.2}", .{v}),
             .boolean => |v| writer.print("{}", .{v}),
             .nil => |_| writer.print("nil", .{}),
+            .obj => |obj| switch (obj.otype) {
+                .STRING => {
+                    const oStr = obj.as(ObjString);
+                    try writer.print("\"{s}\"", .{oStr.chars[0..oStr.length]});
+                },
+            },
         };
     }
 };
