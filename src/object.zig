@@ -36,6 +36,7 @@ pub const Obj = packed struct {
     }
 };
 
+// TODO: For optimization, implement challenges 1 and 2 from chapter 19
 pub const ObjString = packed struct {
     obj: Obj,
 

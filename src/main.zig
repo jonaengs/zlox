@@ -23,14 +23,15 @@ fn repl() !void {
     }
 }
 
-/// Reads the contents of the file in the path into a dynamically
-/// sized and allocated array
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![:0]const u8 {
-    // const file = try std.fs.cwd().openFile(path, .{ .mode = .read_only });
-    // const contents: [:0]u8 = try file.reader().readAllAlloc(allocator, std.math.maxInt(u32));
-    // file.close();
-    // return contents;
-    const data = try std.fs.cwd().readFileAllocOptions(allocator, path, std.math.maxInt(usize), null, 8, 0);
+    const data = try std.fs.cwd().readFileAllocOptions(
+        allocator,
+        path,
+        std.math.maxInt(usize), // Max buffer size in bytes
+        null, // size hint
+        8, // comptime alignment
+        0, // sentinel value
+    );
     return data;
 }
 
@@ -46,11 +47,8 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
             error.OutOfMemory => {
                 std.debug.print("\nERROR: Not enough memory to read: {s}.\n", .{path});
             },
-            // error.ReadError => {
-            //     std.debug.print("\nERROR: Could not read file: {s}.\n", .{path});
-            // },
-            else => {
-                std.debug.print("\nERROR: Other I/O error: {s}.\n", .{path});
+            else => |other_err| {
+                std.debug.print("\nERROR: Other I/O error ({}): {s}.\n", .{ other_err, path });
             },
         }
         std.os.exit(74);
@@ -65,18 +63,19 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
 
 pub fn main() !void {
     // Setup allocator
-    var _allocator_maker = std.heap.GeneralPurposeAllocator(.{}){};
-    const gpa = _allocator_maker.allocator();
+    var gpa = std.heap.GeneralPurposeAllocator(.{}){}; // If memory leaks, add "verbose_log = true" to config
+    const allocator = gpa.allocator();
+    defer std.debug.assert(gpa.deinit() == .ok); // deinit calls detectleaks() in .Debug and .ReleaseSafe modes
 
-    VM.init(gpa);
+    VM.init(allocator);
     defer VM.free();
 
-    var args = try std.process.argsAlloc(gpa);
-    defer std.process.argsFree(gpa, args);
+    var args = try std.process.argsAlloc(allocator);
+    defer std.process.argsFree(allocator, args);
     if (args.len == 1) {
         try repl();
     } else if (args.len == 2) {
-        runFile(gpa, args[1]);
+        runFile(allocator, args[1]);
     } else {
         // debug.print outputs to stderr
         std.debug.print("Usage: zlox [path]\n", .{});

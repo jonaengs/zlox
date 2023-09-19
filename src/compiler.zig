@@ -12,65 +12,6 @@ const copyString = @import("object.zig").copyString;
 
 const DEBUG_PRINT_CODE = @import("build_options").print_code and !builtin.is_test;
 
-const Precedence = enum(u8) {
-    NONE,
-    ASSIGNMENT, // =
-    OR, //         or
-    AND, //        and
-    EQUALITY, //   == !=
-    COMPARISON, // < > <= >=
-    TERM, //       + -
-    FACTOR, //     * /
-    UNARY, //      ! -
-    CALL, //       . ()
-    PRIMARY,
-};
-
-const rules = rules_blk: {
-    var _rules = std.EnumArray(TokenType, ParseRule).initUndefined();
-    _rules.set(.LEFT_PAREN, ParseRule{ .prefix = grouping, .infix = null, .precedence = .NONE });
-    _rules.set(.RIGHT_PAREN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.LEFT_BRACE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.RIGHT_BRACE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.COMMA, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.DOT, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.MINUS, ParseRule{ .prefix = unary, .infix = binary, .precedence = .TERM });
-    _rules.set(.PLUS, ParseRule{ .prefix = null, .infix = binary, .precedence = .TERM });
-    _rules.set(.SEMICOLON, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.SLASH, ParseRule{ .prefix = null, .infix = binary, .precedence = .FACTOR });
-    _rules.set(.STAR, ParseRule{ .prefix = null, .infix = binary, .precedence = .FACTOR });
-    _rules.set(.BANG, ParseRule{ .prefix = unary, .infix = null, .precedence = .NONE });
-    _rules.set(.BANG_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .EQUALITY });
-    _rules.set(.EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.EQUAL_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .EQUALITY });
-    _rules.set(.GREATER, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
-    _rules.set(.GREATER_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
-    _rules.set(.LESS, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
-    _rules.set(.LESS_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
-    _rules.set(.IDENTIFIER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.STRING, ParseRule{ .prefix = string, .infix = null, .precedence = .NONE });
-    _rules.set(.NUMBER, ParseRule{ .prefix = number, .infix = null, .precedence = .NONE });
-    _rules.set(.AND, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.CLASS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.ELSE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.FALSE, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
-    _rules.set(.FOR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.FUN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.IF, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.NIL, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
-    _rules.set(.OR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.PRINT, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.RETURN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.SUPER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.THIS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.TRUE, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
-    _rules.set(.VAR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.WHILE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.ERROR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    _rules.set(.EOF, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
-    break :rules_blk _rules;
-};
-
 const ParseFn = ?(*const fn () void);
 const ParseRule = struct {
     prefix: ParseFn,
@@ -274,9 +215,70 @@ fn reportErrorAt(token: *const Token, message: []const u8) void {
     } else if (token.ttype == .ERROR) {
         // Skip -- no extra printing needed here
     } else {
-        std.debug.print(" at '{d}'", .{token.slice});
+        std.debug.print(" at '{s}'", .{token.slice});
     }
 
     std.debug.print(": {s}\n", .{message});
     parser.hadError = true;
 }
+
+// PARSER RULES AND PRECEDENCE ENUM
+
+const Precedence = enum(u8) {
+    NONE,
+    ASSIGNMENT, // =
+    OR, //         or
+    AND, //        and
+    EQUALITY, //   == !=
+    COMPARISON, // < > <= >=
+    TERM, //       + -
+    FACTOR, //     * /
+    UNARY, //      ! -
+    CALL, //       . ()
+    PRIMARY,
+};
+
+const rules = rules_blk: {
+    var _rules = std.EnumArray(TokenType, ParseRule).initUndefined();
+    _rules.set(.LEFT_PAREN, ParseRule{ .prefix = grouping, .infix = null, .precedence = .NONE });
+    _rules.set(.RIGHT_PAREN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.LEFT_BRACE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.RIGHT_BRACE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.COMMA, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.DOT, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.MINUS, ParseRule{ .prefix = unary, .infix = binary, .precedence = .TERM });
+    _rules.set(.PLUS, ParseRule{ .prefix = null, .infix = binary, .precedence = .TERM });
+    _rules.set(.SEMICOLON, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.SLASH, ParseRule{ .prefix = null, .infix = binary, .precedence = .FACTOR });
+    _rules.set(.STAR, ParseRule{ .prefix = null, .infix = binary, .precedence = .FACTOR });
+    _rules.set(.BANG, ParseRule{ .prefix = unary, .infix = null, .precedence = .NONE });
+    _rules.set(.BANG_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .EQUALITY });
+    _rules.set(.EQUAL, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.EQUAL_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .EQUALITY });
+    _rules.set(.GREATER, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.GREATER_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.LESS, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.LESS_EQUAL, ParseRule{ .prefix = null, .infix = binary, .precedence = .COMPARISON });
+    _rules.set(.IDENTIFIER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.STRING, ParseRule{ .prefix = string, .infix = null, .precedence = .NONE });
+    _rules.set(.NUMBER, ParseRule{ .prefix = number, .infix = null, .precedence = .NONE });
+    _rules.set(.AND, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.CLASS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.ELSE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.FALSE, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
+    _rules.set(.FOR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.FUN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.IF, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.NIL, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
+    _rules.set(.OR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.PRINT, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.RETURN, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.SUPER, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.THIS, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.TRUE, ParseRule{ .prefix = literal, .infix = null, .precedence = .NONE });
+    _rules.set(.VAR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.WHILE, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.ERROR, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    _rules.set(.EOF, ParseRule{ .prefix = null, .infix = null, .precedence = .NONE });
+    break :rules_blk _rules;
+};
