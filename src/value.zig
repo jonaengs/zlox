@@ -26,6 +26,12 @@ pub const Value = union(enum) {
         std.debug.print("{}", .{self.*});
     }
 
+    /// Returns a nil Value
+    /// Prefixed with underscore to avoid colliding with the nil enum tag
+    pub inline fn _nil() Value {
+        return Value{ .nil = 0.0 };
+    }
+
     pub fn format(
         self: *const Value,
         comptime fmt: []const u8,

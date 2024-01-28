@@ -18,6 +18,7 @@ const debug = @import("debug.zig");
 const compiler = @import("compiler.zig");
 const takeString = @import("object.zig").takeString;
 const freeObjects = @import("memory.zig").freeObjects;
+const Table = @import("table.zig").Table;
 
 const DEBUG_TRACE_EXECUTION = @import("build_options").trace_execution and !builtin.is_test;
 const STACK_MAX_SIZE = 256;
@@ -36,14 +37,18 @@ var stack: [STACK_MAX_SIZE]Value = undefined;
 var sp: u8 = 0; // Points one past the top element of the stack
 pub var objects: ?*Obj = undefined; // Newest element in the objects singly-linked list
 var allocator: std.mem.Allocator = undefined;
+pub var strings: Table = undefined;
+
 
 pub fn init(_allocator: std.mem.Allocator) void {
     resetStack();
     objects = null;
     allocator = _allocator;
+    strings.init(_allocator);
 }
 pub fn free() void {
     freeObjects(allocator);
+    strings.free();
 }
 pub fn interpret(source: [:0]const u8) InterpreterError!void {
     var _chunk: Chunk = undefined;
@@ -94,7 +99,7 @@ pub fn run() InterpreterError!void {
                 push(value);
             },
             .OP_NIL => {
-                push(Value{ .nil = 0.0 });
+                push(Value._nil());
             },
             .OP_TRUE => {
                 push(Value{ .boolean = true });

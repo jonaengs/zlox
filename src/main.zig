@@ -23,6 +23,8 @@ fn repl() !void {
     }
 }
 
+/// Reads complete files contents into a dynamically allocated buffer
+/// and returns the buffer (and ownership of it) to the caller.
 fn readFile(allocator: std.mem.Allocator, path: []const u8) ![:0]const u8 {
     const data = try std.fs.cwd().readFileAllocOptions(
         allocator,
@@ -39,6 +41,7 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
     var source: [:0]const u8 = undefined;
     if (readFile(allocator, path)) |data| {
         source = data;
+        defer allocator.free(source);
     } else |err| {
         switch (err) {
             error.FileNotFound => {
@@ -53,7 +56,6 @@ fn runFile(allocator: std.mem.Allocator, path: []const u8) void {
         }
         std.os.exit(74);
     }
-    defer allocator.free(source);
 
     VM.interpret(source) catch |err| switch (err) {
         error.CompileError => std.process.exit(65),
