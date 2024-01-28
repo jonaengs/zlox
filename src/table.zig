@@ -41,7 +41,7 @@ pub const Table = struct {
             adjustCapacity(table, new_capacity);
         }
 
-        const entry = findEntry(table.entries, key);
+        const entry: *Entry = findEntry(table.entries, key);
         // TODO: Check what this compiles down to. Could be very inefficient.
         const isNewKey = entry.key == null;
         // only increment the count if the entry we're replacing was empty and also not a tombstone
@@ -56,7 +56,7 @@ pub const Table = struct {
 
     /// Returns true and sets the value pointer if the key is found
     /// otherwise, returns false
-    pub fn get(table: *Table, key: *ObjString, value: *Value) bool {
+    pub fn get(table: *Table, key: *const ObjString, value: *Value) bool {
         // Important to check in case the entries array is empty
         if (table.count == 0) return false;
 
@@ -71,7 +71,7 @@ pub const Table = struct {
 
     /// Deletes the key/entry from the table.
     /// Returns true if the key was found, false if the key was not found
-    pub fn delete(table: *Table, key: *ObjString) bool {
+    pub fn delete(table: *Table, key: *const ObjString) bool {
         // Due of linear probing, we cannot simply do tableSet(table, Value._nil())
         // as, in case of collisions, this would cause following keys to no longer be found
 
@@ -175,7 +175,9 @@ fn adjustCapacity(table: *Table, newCapacity: usize) void {
     }
 
     // Freeing table.entries must happen BEFORE we set table.entries to the new entries array
-    table.allocator.free(table.entries);
+    if (table.entries.len > 0) {
+        table.allocator.free(table.entries);
+    }
     table.entries = newEntries;
 }
 
@@ -192,7 +194,7 @@ fn tableAddAll(from: *Table, into: *Table) void {
 /// Finds an entry for the key
 /// If the key is already in the table, the key's existing entry is returned
 /// Otherwise returns a blank/empty entry
-fn findEntry(entries: []Entry, key: *ObjString) *Entry {
+fn findEntry(entries: []Entry, key: *const ObjString) *Entry {
     // It could be that we could achieve better performance by returning
     // a copy of the entry rather than a pointer to it
 
@@ -229,4 +231,67 @@ fn findEntry(entries: []Entry, key: *ObjString) *Entry {
 
         index = (index + 1) % entries.len;
     }
+}
+
+//
+//
+// TESTS
+//
+
+const copyString = @import("object.zig").copyString;
+const VM = @import("vm.zig");
+const Obj = @import("object.zig").Obj;
+
+test "table grows and counts correctly" {
+    var allocator = std.testing.allocator;
+    VM.init(allocator);
+    defer VM.free();
+    
+    var table: Table = undefined;
+    table.init(allocator);
+    defer table.free();
+    
+    try std.testing.expectEqual(@as(usize, 0), table.entries.len);
+    try std.testing.expectEqual(@as(usize, 0), table.count);
+    for (0..4) |i| {
+        const keyStr = [_]u8{'"', 'a', 'a' + @as(u8, @intCast( i)), '"'};
+        const objString = copyString(allocator, keyStr[0..keyStr.len]);
+        _ = table.set(objString, Value._nil());
+    }
+    try std.testing.expectEqual(@as(usize, 8), table.entries.len);
+    try std.testing.expectEqual(@as(usize, 4), table.count);
+    
+    for (4..8) |i| {
+        const keyStr = [_]u8{'"', 'a', 'a' + @as(u8, @intCast( i)), '"'};
+        const objString = copyString(allocator, keyStr[0..keyStr.len]);
+        _ = table.set(objString, Value._nil());
+    }
+    try std.testing.expectEqual(@as(usize, 16), table.entries.len);
+    try std.testing.expectEqual(@as(usize, 8), table.count);
+}
+
+test "String interning equality" {
+    var allocator = std.testing.allocator;
+    VM.init(allocator);
+    defer VM.free();
+    
+    var table: Table = undefined;
+    table.init(allocator);
+    defer table.free();
+    
+    const str1 = "-hello-";
+    const str2 = "-hello-";
+    const str3 = "-HELLO-";
+    const os1 = copyString(allocator, str1[0..str1.len]);
+    const os2 = copyString(allocator, str2[0..str2.len]);
+    const os3 = copyString(allocator, str3[0..str3.len]);
+
+    const o1: *Obj = @ptrCast(&os1.obj);
+    const o2: *Obj = @ptrCast(&os2.obj);
+    const o3: *Obj = @ptrCast(&os3.obj);
+
+    try std.testing.expect(o1.isEqual(o2));
+    try std.testing.expect(o2.isEqual(o1));
+    try std.testing.expect(!o1.isEqual(o3));
+    try std.testing.expect(!o2.isEqual(o3));
 }

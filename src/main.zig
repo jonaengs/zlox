@@ -90,6 +90,11 @@ pub fn main() !void {
 // TESTS
 //
 
+test "Everything" {
+    // Makes tests in other files get run
+    std.testing.refAllDeclsRecursive(@This());
+}
+
 test "add constant doesn't crash" {
     const allocator = std.testing.allocator;
     var chunk: Chunk = undefined;
